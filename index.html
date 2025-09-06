@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Triage Dashboard</title>
+    <!-- 1. Add the Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: auto;
+            background: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        button#fetch-button {
+            display: block;
+            margin: 20px auto 30px auto;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background-color: #3498db;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button#fetch-button:hover {
+            background-color: #2980b9;
+        }
+        #loader { display: none; text-align: center; margin: 20px; font-size: 18px; color: #7f8c8d; }
+
+        /* 2. Styles for the new Stats and Chart section */
+        .stats-container {
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+            padding: 15px;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .stat-box {
+            padding: 10px 20px;
+        }
+        .stat-box h3 {
+            margin: 0;
+            color: #7f8c8d;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        .stat-box p {
+            margin: 5px 0 0 0;
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .chart-container {
+            width: 90%;
+            max-width: 700px;
+            margin: 40px auto;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; vertical-align: top; }
+        th { background-color: #ecf0f1; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+
+        .tag { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; color: white; display: inline-block; margin-bottom: 5px; }
+        .tag-human-review { background-color: #f39c12; }
+        .tag-auto-reply { background-color: #27ae60; }
+        .tag-sales { background-color: #8e44ad; }
+        .tag-support { background-color: #2980b9; }
+        .tag-inquiry { background-color: #34495e; }
+        
+        .details-cell { font-size: 13px; }
+        .detail-tag { display: inline-block; padding: 3px 8px; margin: 2px; border-radius: 4px; font-size: 11px; font-weight: bold; color: #555; background-color: #e0e0e0; }
+        .detail-tag.phone { background-color: #dcfce7; color: #166534; }
+        .detail-tag.email { background-color: #e0f2fe; color: #075985; }
+        .detail-tag.requirement { background-color: #fef9c3; color: #854d0e; }
+        .detail-tag.positive { background-color: #dcfce7; color: #166534; }
+        .detail-tag.negative { background-color: #fee2e2; color: #991b1b; }
+        
+        .reply-button { display: inline-block; margin-top: 10px; padding: 6px 12px; background-color: #34495e; color: white; text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: bold; transition: background-color 0.2s; }
+        .reply-button:hover { background-color: #2c3e50; }
+        pre { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; margin: 0; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Intelligent Triage Dashboard</h1>
+        
+        <!-- 3. The new stats bar and chart canvas -->
+        <div id="analytics-section" style="display:none;">
+            <div class="stats-container">
+                <div class="stat-box">
+                    <h3>Total Emails</h3>
+                    <p id="total-emails">0</p>
+                </div>
+                <div class="stat-box">
+                    <h3>Pending Review</h3>
+                    <p id="pending-emails">0</p>
+                </div>
+                <div class="stat-box">
+                    <h3>Auto-Replied</h3>
+                    <p id="resolved-emails">0</p>
+                </div>
+                <div class="stat-box">
+                    <h3>Negative Sentiment</h3>
+                    <p id="negative-sentiment">0</p>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="intent-chart"></canvas>
+            </div>
+        </div>
+
+        <button id="fetch-button">Fetch & Triage New Emails</button>
+        <div id="loader">Processing... Please wait.</div>
+        
+        <div id="results">
+            <table id="email-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th style="width: 20%;">From / Subject</th>
+                        <th style="width: 25%;">Extracted Details</th>
+                        <th style="width: 15%;">AI Triage</th>
+                        <th style="width: 40%;">Response / Summary / Action</th>
+                    </tr>
+                </thead>
+                <tbody id="email-body"></tbody>
+            </table>
+            <p id="no-emails" style="display:none; text-align:center; margin-top: 20px;">No new unread emails found.</p>
+        </div>
+    </div>
+
+    <script>
+        // 4. All the JavaScript logic, now including stats and chart generation
+        const fetchButton = document.getElementById('fetch-button');
+        const loader = document.getElementById('loader');
+        const emailTable = document.getElementById('email-table');
+        const emailTableBody = document.getElementById('email-body');
+        const noEmailsMessage = document.getElementById('no-emails');
+        const analyticsSection = document.getElementById('analytics-section');
+
+        let intentChart = null; // Variable to hold the chart instance
+
+        async function fetchAndDisplayEmails() {
+            loader.style.display = 'block';
+            emailTable.style.display = 'none';
+            noEmailsMessage.style.display = 'none';
+            analyticsSection.style.display = 'none';
+            emailTableBody.innerHTML = '';
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/process-emails');
+                const result = await response.json();
+                const emails = result.data;
+
+                if (emails.length === 0) {
+                    noEmailsMessage.style.display = 'block';
+                } else {
+                    analyticsSection.style.display = 'block';
+                    emailTable.style.display = 'table';
+                    
+                    updateStats(emails);
+                    renderTable(emails);
+                    renderChart(emails);
+                }
+            } catch (error) {
+                console.error('Error fetching emails:', error);
+                alert('An error occurred. Make sure the Python server is running.');
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        fetchButton.addEventListener('click', fetchAndDisplayEmails);
+        
+        function updateStats(emails) {
+            document.getElementById('total-emails').textContent = emails.length;
+            document.getElementById('pending-emails').textContent = emails.filter(e => e.action === 'Flag for Human Review').length;
+            document.getElementById('resolved-emails').textContent = emails.filter(e => e.action === 'Auto-Reply').length;
+            document.getElementById('negative-sentiment').textContent = emails.filter(e => e.sentiment === 'NEGATIVE').length;
+        }
+
+        function renderTable(emails) {
+             emails.forEach(email => {
+                const row = document.createElement('tr');
+                const isHumanReview = email.action === 'Flag for Human Review';
+                const actionClass = isHumanReview ? 'tag-human-review' : 'tag-auto-reply';
+                let intentClass = 'tag-inquiry';
+                if(email.intent === 'Sales Lead') intentClass = 'tag-sales';
+                if(email.intent === 'Technical Support') intentClass = 'tag-support';
+
+                let detailsHtml = '';
+                const info = email.extracted_info;
+                if (info) {
+                    info.phone_numbers.forEach(p => { detailsHtml += `<span class="detail-tag phone">📞 ${escapeHtml(p)}</span>`; });
+                    info.email_addresses.forEach(e => { detailsHtml += `<span class="detail-tag email">✉️ ${escapeHtml(e)}</span>`; });
+                    info.requirements.forEach(r => { detailsHtml += `<span class="detail-tag requirement">💡 ${escapeHtml(r)}</span>`; });
+                    info.positive_words.forEach(w => { detailsHtml += `<span class="detail-tag positive">😊 ${escapeHtml(w)}</span>`; });
+                    info.negative_words.forEach(w => { detailsHtml += `<span class="detail-tag negative">😠 ${escapeHtml(w)}</span>`; });
+                }
+
+                let actionCellContent = '';
+                if (isHumanReview) {
+                    const fromAddress = extractEmail(email.sender);
+                    const mailtoSubject = `Re: ${email.subject}`;
+                    const mailtoBody = `\n\n--- Original Message ---\nFrom: ${email.sender}\nDate: ${email.received_date}\nSubject: ${email.subject}\n\n${email.body}`;
+                    actionCellContent = `<pre>${escapeHtml(email.response_or_summary)}</pre><a href="mailto:${fromAddress}?subject=${encodeURIComponent(mailtoSubject)}&body=${encodeURIComponent(mailtoBody)}" target="_blank" class="reply-button">Reply in Gmail</a>`;
+                } else {
+                    actionCellContent = `<pre>${escapeHtml(email.response_or_summary)}</pre>`;
+                }
+
+                row.innerHTML = `<td><strong>${escapeHtml(email.sender)}</strong><br>${escapeHtml(email.subject)}</td><td class="details-cell">${detailsHtml}</td><td><span class="tag ${intentClass}">${escapeHtml(email.intent)}</span><br><span class="tag ${actionClass}">${escapeHtml(email.action)}</span></td><td>${actionCellContent}</td>`;
+                emailTableBody.appendChild(row);
+            });
+        }
+
+        function renderChart(emails) {
+            const ctx = document.getElementById('intent-chart').getContext('2d');
+            const intentCounts = emails.reduce((acc, email) => {
+                acc[email.intent] = (acc[email.intent] || 0) + 1;
+                return acc;
+            }, {});
+
+            if (intentChart) {
+                intentChart.destroy(); // Destroy old chart before creating a new one
+            }
+
+            intentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(intentCounts),
+                    datasets: [{
+                        label: 'Number of Emails by Intent',
+                        data: Object.values(intentCounts),
+                        backgroundColor: [
+                            'rgba(52, 152, 219, 0.7)',
+                            'rgba(243, 156, 18, 0.7)',
+                            'rgba(142, 68, 173, 0.7)',
+                            'rgba(41, 128, 185, 0.7)',
+                            'rgba(44, 62, 80, 0.7)'
+                        ],
+                        borderColor: [
+                             'rgba(52, 152, 219, 1)',
+                            'rgba(243, 156, 18, 1)',
+                            'rgba(142, 68, 173, 1)',
+                            'rgba(41, 128, 185, 1)',
+                            'rgba(44, 62, 80, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                    responsive: true,
+                    plugins: { legend: { display: false }, title: { display: true, text: 'Email Intent Breakdown' } }
+                }
+            });
+        }
+
+        function extractEmail(fromHeader) {
+            const match = fromHeader.match(/<(.+)>/);
+            return match ? match[1] : fromHeader;
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe ? String(unsafe).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;") : "";
+        }
+    </script>
+
+</body>
+</html>

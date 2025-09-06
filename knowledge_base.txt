@@ -1,0 +1,10 @@
+Frequently Asked Questions:
+
+Q: How do I reset my password?
+A: To reset your password, please go to the 'Account' page on our website and click the 'Forgot Password' link. You will receive an email with instructions.
+
+Q: What are your support hours?
+A: Our support team is available from 9 AM to 5 PM, Monday to Friday. Urgent requests outside these hours will be handled with priority.
+
+Q: Is the service down?
+A: You can check our system status on our website at status.example.com. We are not aware of any current outages.
